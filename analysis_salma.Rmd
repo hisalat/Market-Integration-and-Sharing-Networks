@@ -1,0 +1,692 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+Inferential stats
+
+```{r}
+
+#Importing the datasets
+
+library(RColorBrewer)
+library(plotrix)
+library(tidyverse)
+library(dplyr)
+library(readxl)
+library(ggplot2)
+library(webshot2)
+library(sjPlot)
+library(sjmisc)
+library(sjlabelled)
+library(xtable)
+library(lme4)
+library(broom)
+library(MASS)
+
+getwd()
+demography <- read_excel("C:/Users/Documents/Codem/codem_data_final.xlsx",sheet = "demography")
+
+
+labor <- read_excel("C:/Users/Documents/Codem/codem_data_final.xlsx",sheet = "labor")
+
+alters_counts <- read_excel("C:/Users/Documents/Codem/codem_data_final.xlsx",sheet = "sn_alters_counts")
+
+economy <- read_excel("C:/Users/Documents/Codem/codem_data_final.xlsx",sheet = "economy")
+
+games <- read_excel("C:/Users/Documents/Codem/codem_data_final.xlsx",sheet = "games")
+
+dg_nonkin_money <- read_excel("C:/Users/Documents/Codem/codem_data_final.xlsx", sheet = "dg_nonkin_money")
+
+
+#Filtering and creating necessary data
+
+##Demography table
+
+### getting the data of people who were interviewed
+
+demography = demography %>% filter(interviewed == "yes")
+
+### creating age column
+
+demography$age_rect = as.integer(interval(demography$dob, Sys.Date()) / dyears(1))
+
+#Changing little to yes in darija column
+
+demography$darija[demography$darija == "little"] ="yes"
+unique(demography$darija)
+
+#Changing the reference level of darija column to no
+
+demography$darija = relevel(as.factor(demography$darija), ref = "no")
+unique(demography$darija)
+
+##Labor table
+
+unique(labor$category)
+
+### creating a new column named wage where the value is yes if the person is engaged in wage labor and no if not 
+
+labor = labor%>% mutate(wage = case_when(category %in% c("wage labor","house work and wage labor","house work and subsistence work and wage labor","salaried employment")~ "yes", TRUE ~ "no"))
+
+### merging the column taxi with the labor table so to create the 'wage labor or taxi' column that we need in the
+###models
+
+
+labor = merge(labor[, c("sn_ego_index", "category","wage")], economy[, c("sn_ego_index", "taxi")], by = "sn_ego_index", all = TRUE)
+
+### creating the wage_taxi column where it equals yes if either taxi or wage is equal to yes or both and no if both are equal to no
+
+
+labor$wage_taxi <- ifelse(labor$wage == "yes" | labor$taxi == "yes", "yes", "no")
+
+labor
+
+
+
+#Removing unnecessary data + Dealing with nas
+
+sum(is.na(economy$total_net_income_mad))
+economy$total_net_income_mad[is.na(economy$total_net_income_mad)] = 0
+unique(economy$total_net_income_mad)
+
+
+#Coding the data
+
+val_rplc = c("always","sometimes","rarely")
+
+
+categorize_binary = function(category){
+  if (category %in% val_rplc | category == "yes"| category == "little" ){
+    return("1")
+    }else{
+      return("0")
+    }
+}
+
+
+
+economy$loans = sapply(economy$loans,categorize_binary)
+unique(economy$loans)
+
+
+
+#Log-transforming total_net_income
+
+# Creating a histogram for total_net_income_mad
+a = hist(economy$total_net_income_mad, main="Histogram of total_net_income", xlab="Total Net Income")
+plot(a)
+
+
+# Log-transforming the total_net_income_mad column
+economy$total_net_income_log <- log(economy$total_net_income_mad + 1)
+
+#Checking
+b = hist(economy$total_net_income_log, main="Histogram of total_net_income", xlab="Total Net Income")
+plot(b)
+
+unique(economy$total_net_income_log)
+
+#Scaling age to make results interpretable
+
+demography$age_scaled = demography$age_rect - 18
+
+
+
+#First hypothesis: MI increases reliance on non-kin and extra-community ties
+
+##Dataset 
+
+H1_nonkin_extracom = alters_counts[,c("sn_ego_index","unique_nonkin_p1.1","unique_out_com_p1.1","unique_nonkin_p1.2","unique_out_com_p1.2")] %>% left_join(labor[,c("sn_ego_index","wage_taxi")], by = "sn_ego_index") %>% left_join(demography[,c("sn_ego_index","sex","bone","age_rect","age_scaled","darija","HID")], by = "sn_ego_index") %>% left_join(economy[,c("sn_ego_index","total_net_income_log","total_net_income_mad")], by= "sn_ego_index") 
+
+H1_nonkin_extracom
+sum(is.na(H1_nonkin_extracom))
+
+unique(H1_nonkin_extracom$darija)
+
+
+
+##Models
+
+###P1.1: MI is associated with naming more non kin and external ties as time-sharing, house-sharing in cities, and money-sharing partners
+
+##### Model1
+
+mp1.1.1 = lmer(unique_nonkin_p1.1 ~ total_net_income_log + (1|HID) +darija + wage_taxi + sex + bone + age_scaled, data = H1_nonkin_extracom)
+
+mp1.1.1.null = lm(unique_nonkin_p1.1 ~ 1, data = H1_nonkin_extracom)
+
+c(AIC(mp1.1.1.null), AIC(mp1.1.1))
+
+tab_model(mp1.1.1,dv.labels = "Number of nonkin alters")
+
+# tab_model(mp1.1.1,dv.labels = "Number of nonkin alters", title = "mp1.1.1", file = "mp1_1_1.html")
+# webshot2::webshot( "mp1_1_1.html", "mp1_1_1.png")
+
+
+##### Model2
+
+mp1.1.2 = lmer(unique_out_com_p1.1 ~ total_net_income_log + (1|HID) + darija + wage_taxi + sex + bone + age_scaled, data = H1_nonkin_extracom)
+
+mp1.1.2.null = lm(unique_out_com_p1.1 ~ 1, data = H1_nonkin_extracom)
+
+summary(mp1.1.2)
+c(AIC(mp1.1.2.null), AIC(mp1.1.2))
+
+
+tab_model(mp1.1.2,dv.labels = "Number of out community alters")
+# tab_model(mp1.1.2,dv.labels = "Number of out community alters",title = "mp1.1.2",file = "mp1_1_2.html")
+# 
+# webshot2::webshot( "mp1_1_2.html", "mp1_1_2.png")
+
+
+
+###P1.2: MI is  not associated with naming more non-kin and external ties as (in brief) traditional networks partners (including natural hazards)
+
+####Model1
+
+
+mp1.2.1 = lmer(unique_nonkin_p1.2 ~ total_net_income_log + (1|HID) +darija + wage_taxi + sex + bone + age_scaled, data = H1_nonkin_extracom)
+
+mp1.2.1.null = lm(unique_nonkin_p1.2 ~ 1, data = H1_nonkin_extracom)
+
+summary(mp1.2.1)
+
+c(AIC(mp1.2.1.null), AIC(mp1.2.1))
+
+tab_model(mp1.2.1,dv.labels = "Number of nonkin alters")
+
+# tab_model(mp1.2.1,dv.labels = "Number of nonkin alters",title = "mp1.2.1",file = "mp1_2_1.html")
+# 
+# webshot2::webshot( "mp1_2_1.html", "mp1_2_1.png")
+
+
+####Model2
+
+mp1.2.2 = lmer(unique_out_com_p1.2 ~ total_net_income_log + (1|HID)+ darija + wage_taxi + sex + bone + age_scaled, data = H1_nonkin_extracom)
+
+mp1.2.2.null = lm(unique_out_com_p1.2 ~ 1, data = H1_nonkin_extracom)
+
+summary(mp1.2.2)
+
+
+c(AIC(mp1.2.2.null), AIC(mp1.2.2))
+
+tab_model(mp1.2.2, dv.labels = "Number of out community alters")
+
+# tab_model(mp1.2.2, dv.labels = "Number of out community alters",title = "mp1.2.2",file = "mp1_2_2.html")
+# 
+# webshot2::webshot( "mp1_2_2.html", "mp1_2_2.png")
+
+
+
+#Second hypothesis: MI decreases reliance on kin and community ties 
+
+##Dataset
+
+H2_kin_incom = alters_counts[,c("sn_ego_index","unique_kin_total","unique_in_com_total")] %>% left_join(labor[,c("sn_ego_index","wage_taxi")], by = "sn_ego_index") %>% left_join(demography[,c("sn_ego_index","sex","bone","age_rect","age_scaled","darija","HID")], by = "sn_ego_index") %>% left_join(economy[,c("sn_ego_index","total_net_income_log")], by= "sn_ego_index") 
+
+H2_kin_incom
+sum(is.na(H2_kin_incom))
+
+##Models
+
+###P2.1: MI is associated with naming less in-community and kin ties 
+
+
+####Model1
+
+mp2.1.1 = lmer(unique_kin_total ~ total_net_income_log + (1|HID) + darija + wage_taxi + bone + sex + age_scaled, data = H2_kin_incom)
+
+mp2.1.1.null = lm(unique_kin_total ~ 1, data = H2_kin_incom)
+
+
+summary(mp2.1.1)
+
+c(AIC(mp2.1.1.null), AIC(mp2.1.1))
+
+tab_model(mp2.1.1, dv.labels = "Number of kin alters")
+
+# tab_model(mp2.1.1, dv.labels = "Number of kin alters",title = "mp2.1.1",file = "mp2_1_1.html")
+# 
+# webshot2::webshot( "mp2_1_1.html", "mp2_1_1.png")
+
+
+####Model2
+
+mp2.1.2 = lmer(unique_in_com_total ~ total_net_income_log+ (1|HID) + darija + wage_taxi + bone + sex + age_scaled, data = H2_kin_incom)
+
+mp2.1.2.null = lm(unique_in_com_total ~ 1, data = H2_kin_incom)
+
+summary(mp2.1.2)
+
+c(AIC(mp2.1.2.null), AIC(mp2.1.2))
+
+tab_model(mp2.1.2, dv.labels = "Number of in community alters")
+
+# tab_model(mp2.1.2, dv.labels = "Number of in community alters",title = "mp2.1.2",file = "mp2_1_2.html")
+# 
+# webshot2::webshot( "mp2_1_2.html", "mp2_1_2.png")
+
+
+#Third hypothesis: MI increases trust in financial institutions 
+
+
+##Dataset 
+
+
+H3_financial_ins = economy %>% 
+  dplyr::select(-taxi, -unit,-total_net_income_mad,-X_index) %>%
+  left_join(games[,c("sn_ego_index", "bb_acceptable1")], by = 'sn_ego_index')%>%
+  left_join(labor[,c("sn_ego_index","wage_taxi")], by = "sn_ego_index") %>%
+  left_join(demography[,c("sn_ego_index","sex","age_rect","age_scaled","darija","HID")], by = "sn_ego_index") 
+
+unique(H3_financial_ins$loan_trust)
+removed_H3_financial_ins_loan = subset(H3_financial_ins, loan_trust == "no idea")#11 rows
+H3_financial_ins = subset(H3_financial_ins, loan_trust != "no idea")
+
+unique(H3_financial_ins$bb_acceptable1)
+removed_H3_financial_ins_accep = subset(H3_financial_ins, bb_acceptable1 == "no idea")#3 rows
+H3_financial_ins = subset(H3_financial_ins, bb_acceptable1 != "no idea")
+
+H3_financial_ins$loan_trust = sapply(H3_financial_ins$loan_trust,categorize_binary)
+
+H3_financial_ins$bb_acceptable1 = sapply(H3_financial_ins$bb_acceptable1, categorize_binary)
+
+unique(H3_financial_ins$bank_savings)
+
+H3_financial_ins = subset(H3_financial_ins, !bank_savings %in% c("no idea","refused to tell"))
+
+unique(H3_financial_ins$bank_savings)
+H3_financial_ins$bank_savings = ifelse(H3_financial_ins$bank_savings == "not_defined",0,1)
+
+
+unique(H3_financial_ins$bank_savings)
+
+unique(H3_financial_ins$loan_trust)
+unique(H3_financial_ins$bb_acceptable1)
+
+sum(is.na(H3_financial_ins))
+
+##Models
+
+
+
+
+
+###P3.1: MI is associated with higher acceptability of taking a loan from a bank or microfinance institution 
+
+table(H3_financial_ins$bb_acceptable1)
+
+mp3.1.1 <- glmer(as.numeric(bb_acceptable1) ~ total_net_income_log +(1|HID) + darija + wage_taxi + sex + age_scaled , data = H3_financial_ins, family = binomial(link = "logit"))
+
+mp3.1.1.null = glm(as.numeric(bb_acceptable1) ~ 1 , data = H3_financial_ins, family = binomial(link = "logit"))
+
+
+summary(mp3.1.1)
+
+tab_model(mp3.1.1, dv.labels = "Odds of loan acceptability")
+
+# tab_model(mp3.1.1, dv.labels = "Odds of loan acceptability",title = "mp3.1.1",file = "mp3_1_1.html")
+# 
+# webshot2::webshot( "mp3_1_1.html", "mp3_1_1.png")
+
+c(AIC(mp3.1.1.null), AIC(mp3.1.1))
+
+###P3.2: MI is associated with higher trustworthiness in banks or micro finance institutions 
+
+
+table(H3_financial_ins$loan_trust)
+
+mp3.2.1 <- glmer(as.numeric(loan_trust) ~ total_net_income_log + (1|HID)+darija + wage_taxi + sex + age_scaled , data = H3_financial_ins, family = binomial(link = "logit"))
+
+mp3.2.1.null = glm(as.numeric(loan_trust) ~ 1, data = H3_financial_ins, family = binomial(link = "logit"))
+
+
+summary(mp3.2.1)
+
+c(AIC(mp3.2.1.null), AIC(mp3.2.1))
+
+tab_model(mp3.2.1, dv.labels = "Odds of trusting financial institutions")
+
+# tab_model(mp3.2.1, dv.labels = "Odds of trusting financial institutions",title = "mp3.2.1",file = "mp3_2_1.html")
+# 
+# webshot2::webshot( "mp3_2_1.html", "mp3_2_1.png")
+
+
+
+###P3.3: MI is associated with taking a loan from the bank or a microfinance institution
+
+table(H3_financial_ins$loans)
+
+mp3.3.1 <- glmer(as.numeric(loans) ~ total_net_income_log + (1|HID)+darija + wage_taxi + sex + age_scaled , data = H3_financial_ins, family = binomial(link = "logit"))
+
+mp3.3.1.null = glm(as.numeric(loans) ~ 1 , data = H3_financial_ins, family = binomial(link = "logit"))
+
+summary(mp3.3.1)
+
+c(AIC(mp3.3.1.null), AIC(mp3.3.1))
+
+tab_model(mp3.3.1, dv.labels = "Odds of taking a Loan")
+
+# tab_model(mp3.3.1, dv.labels = "Odds of taking a Loan",title = "mp3.3.1",file = "mp3_3_1.html")
+# 
+# webshot2::webshot( "mp3_3_1.html", "mp3_3_1.png")
+
+
+
+
+
+###P3.4: MI is associated with having savings in a financial institution
+
+
+table(H3_financial_ins$bank_savings)
+
+mp3.4.1 <- glmer(as.numeric(bank_savings) ~ total_net_income_log+(1|HID) + darija + wage_taxi + sex + age_scaled , data = H3_financial_ins, family = binomial(link = "logit"))
+
+mp3.4.1.null <- glm(as.numeric(bank_savings) ~ 1, data = H3_financial_ins, family = binomial(link = "logit"))
+
+
+summary(mp3.4.1 )
+
+c(AIC(mp3.4.1.null), AIC(mp3.4.1))
+
+tab_model(mp3.4.1, dv.labels = "Odds of having bank savings")
+
+# tab_model(mp3.4.1, dv.labels = "Odds of having bank savings",title = "mp3.4.1",file = "mp3_4_1.html")
+# 
+# webshot2::webshot( "mp3_4_1.html", "mp3_4_1.png")
+
+
+# Fourth hypothesis 
+
+##Dataset
+
+H4_games = games %>% dplyr::select("sn_ego_index", "game3_shared")%>%
+  left_join(labor[,c("sn_ego_index","wage_taxi")], by = "sn_ego_index") %>%
+  left_join(demography[,c("sn_ego_index","sex","age_rect","age_scaled","darija","HID","bone")], by = "sn_ego_index")%>%
+  left_join(economy[,c("sn_ego_index","total_net_income_log")], by= "sn_ego_index") %>%
+  left_join(dg_nonkin_money[,c("sn_ego_index","money_to_non_kin")],by= "sn_ego_index")
+
+
+H4_games
+
+sum(is.na(H4_games))
+
+
+
+
+
+##Models
+
+###P4.1: MI is associated with increased generosity towards other community projects.
+
+
+mp4.1.1 <- lmer(game3_shared ~ total_net_income_log +(1|HID) +darija + wage_taxi + sex + age_scaled , data = H4_games)
+
+mp4.1.1.null <- lm(game3_shared ~ 1 , data = H4_games)
+
+summary(mp4.1.1 )
+c(AIC(mp4.1.1.null), AIC(mp4.1.1))
+
+tab_model(mp4.1.1, dv.labels = "Amounts allocated to another community project ")
+
+# tab_model(mp4.1.1, dv.labels = "Amounts allocated to another community project ",title = "mp4.1.1",file = "mp4_1_1.html")
+# 
+# webshot2::webshot( "mp4_1_1.html", "mp4_1_1.png")
+
+###P4.2: MI is associated with increased generosity towards non-kin
+
+mp4.2.1 = lmer(money_to_non_kin ~ total_net_income_log +(1|HID) +darija + wage_taxi + sex + age_scaled , data = H4_games)
+
+mp4.2.1.null = lm(money_to_non_kin ~ 1 , data = H4_games)
+
+summary(mp4.2.1 )
+
+c(AIC(mp4.2.1.null), AIC(mp4.2.1))
+
+tab_model(mp4.2.1, dv.labels = "Amounts allocated to nonkin alters ")
+
+# tab_model(mp4.2.1, dv.labels = "Amounts allocated to nonkin alters ",title = "mp4.2.1",file = "mp4_2_1.html")
+#  
+# webshot2::webshot( "mp4_2_1.html", "mp4_2_1.png")
+
+
+```
+
+
+
+
+
+
+
+***************Results: Descriptive stats
+
+
+
+
+
+
+
+
+```{r}
+#############Plots
+
+# total net income vs wage_taxi
+boxplot(total_net_income_log ~ wage_taxi, data = H1_nonkin_extracom, 
+        main = "Total net income per engagement in wage labor or taxi",  # Title of the plot
+        xlab = "Engagement in wage or taxi",              # Label for the x-axis
+        ylab = "Log of total net income",                # Label for the y-axis
+        col = c("turquoise4", "violetred"),             # Color of the boxes
+        border = "black",              # Color of the box outlines
+        notch = FALSE,                 # Set to TRUE for notched box plot
+        notchwidth = 0.5,              # Width of the notches
+        outline = TRUE)  # Labels for the boxes
+
+
+
+
+
+
+
+```
+
+
+```{r}
+
+#total net income vs darija
+boxplot(total_net_income_log ~ darija, data = H1_nonkin_extracom, 
+        main = "Total net income per levels of Darija fluency",  # Title of the plot
+        xlab = "Darija fluency",              # Label for the x-axis
+        ylab = "Log of total net income",                # Label for the y-axis
+        col = c("turquoise4", "violetred"),             # Color of the boxes
+        border = "black",              # Color of the box outlines
+        notch = FALSE,                 # Set to TRUE for notched box plot
+        notchwidth = 0.5,              # Width of the notches
+        outline = TRUE               # Show individual data points
+       )  # Labels for the boxes
+```
+
+
+```{r}
+
+# wage or taxi vs darija
+
+table_data <- table(H1_nonkin_extracom$wage_taxi, H1_nonkin_extracom$darija)
+barplot(table_data, legend.text = rownames(table_data),
+        main = " Engagement in Wage labor or taxi per levels of darija fluency",
+        xlab = "Darija fluency", ylab = "Frequency",
+        col = c("turquoise4", "violetred"), beside = TRUE)
+
+```
+
+```{r}
+econ_desc <- read_excel("C:/Users/asus/Desktop/codem_data_final.xlsx", sheet = "econ_descriptive")
+View(econ_desc)
+
+## Descriptive stats
+
+
+#percentage of male females interviewed 
+
+
+#average income for females vs males
+
+
+
+# Shares of each source of income from the total income of individuals within the village
+
+#econ_desc$taxi_income_year = as.numeric(econ_desc$taxi_income_year)
+sum(is.na(econ_desc$taxi_income_year))
+sum(is.na(econ_desc))
+
+econ_desc$gov_other_income_mad = as.numeric(econ_desc$gov_other_income_mad)
+econ_desc$taxi_income_year = as.numeric(econ_desc$taxi_income_year)
+econ_desc$job_income_year_mad = as.numeric(econ_desc$job_income_year_mad)
+econ_desc$agricultural_income_mad = as.numeric(econ_desc$agricultural_income_mad)
+econ_desc$livestock_income_mad = as.numeric(econ_desc$livestock_income_mad)
+
+econ_desc$taxi_income_year[is.na(econ_desc$taxi_income_year)] = 0
+sum(is.na(econ_desc$taxi_income_year))
+econ_desc = econ_desc %>% mutate(total_income = gov_other_income_mad + taxi_income_year + job_income_year_mad + agricultural_income_mad + livestock_income_mad)
+
+income_avg <- econ_desc[,c("sn_ego_index","gov_other_income_mad","taxi_income_year","job_income_year_mad","agricultural_income_mad","livestock_income_mad","total_income","total_net_income_mad","taxi_wage_income_mad")] %>%
+  mutate(
+    avggov = gov_other_income_mad  / total_income,
+    avgtaxi = taxi_income_year / total_income,
+    avgwage = job_income_year_mad / total_income,
+    avgagri = agricultural_income_mad/total_income,
+    avgstock = livestock_income_mad/total_income,
+    avgtaxi_wage = taxi_wage_income_mad/total_income
+  )
+
+income_avg <- income_avg %>%
+  mutate(
+    percgov = avggov * 100,
+    perctaxi = avgtaxi * 100,
+    percwage = avgwage * 100,
+    percagri = avgagri * 100,
+    percstock = avgstock * 100,
+    perctaxi_wage = avgtaxi_wage * 100
+    
+  )
+
+income_avg[is.na(income_avg)] = 0
+
+View(income_avg)
+
+
+global.gov.income = sum(income_avg$gov_other_income_mad)
+global.taxi.wage.income = sum(income_avg$taxi_wage_income_mad)
+global.agri.income = sum(income_avg$agricultural_income_mad)
+global.livestock.income = sum(income_avg$livestock_income_mad)
+
+global_income = sum(global.gov.income+global.taxi.wage.income+global.agri.income+global.livestock.income)
+
+global.gov.perc = (global.gov.income/global_income) * 100
+global.taxi.wage.perc = (global.taxi.wage.income/global_income)*100
+global.agri.perc = (global.agri.income/global_income)*100
+global.livestock.perc = (global.livestock.income/global_income)*100
+
+income.shares.perc = c(round(global.gov.perc, digits = 2),
+                       round(global.taxi.wage.perc, digits = 2),
+                       round(global.agri.perc, digits = 2),
+                       round(global.livestock.perc , digits = 2))
+
+
+
+
+
+
+#average sharing partners across the village
+mean(H1_nonkin_extracom$unique_nonkin_p1.2)
+mean(H1_nonkin_extracom$unique_out_com_p1.2)
+mean(H2_kin_incom$unique_kin_total)
+mean(H2_kin_incom$unique_in_com_total)
+
+#Shares of each type of alters the total alters named within within the village
+sum(H1_nonkin_extracom$unique_nonkin_p1.2)/sum(H1_nonkin_extracom$unique_nonkin_p1.1+H1_nonkin_extracom$unique_out_com_p1.1+H2_kin_incom$unique_kin_total+H2_kin_incom$unique_in_com_total)*100
+
+sum(H1_nonkin_extracom$unique_out_com_p1.2)/sum(H1_nonkin_extracom$unique_nonkin_p1.1+H1_nonkin_extracom$unique_out_com_p1.1+H2_kin_incom$unique_kin_total+H2_kin_incom$unique_in_com_total)*100
+
+sum(H2_kin_incom$unique_kin_total)/sum(H1_nonkin_extracom$unique_nonkin_p1.1+H1_nonkin_extracom$unique_out_com_p1.1+H2_kin_incom$unique_kin_total+H2_kin_incom$unique_in_com_total)*100
+
+sum(H2_kin_incom$unique_in_com_total)/sum(H1_nonkin_extracom$unique_nonkin_p1.1+H1_nonkin_extracom$unique_out_com_p1.1+H2_kin_incom$unique_kin_total+H2_kin_incom$unique_in_com_total)*100
+
+#average of people with an account in a financial institution per household
+
+bank.counts = H3_financial_ins[,c("HID","bank")] %>% group_by(HID) %>% summarize(num_account = sum( bank == "yes"))
+
+table(bank.counts$num_account)
+mean(bank.counts$num_account)
+
+#percentage of people who have an account in fin inst in the interview population
+
+length(economy$bank[economy$bank == "yes"])
+
+perc.account = (sum(bank.counts$num_account))/194 * 100 # +12 removed individuals who did have an account too
+
+perc.account
+
+#average people who took a loan per house
+
+loan.counts = econ_desc[,c("HID","loans")] %>% group_by(HID) %>% summarize(num_loans = sum( loans == "yes"))
+
+table(loan.counts$num_loans)
+mean(loan.counts$num_loans)
+
+#perc of people who took a loan from the village
+
+perc.loans = length(economy$loans[economy$loans == "yes"])/194 *100
+perc.loans
+
+
+
+# perc of people who trust financial institutions
+
+length(econ_desc$loan_trust[econ_desc$loan_trust != "never"])
+
+perc.loans.trust = length(econ_desc$loan_trust[econ_desc$loan_trust != "never"])/194 *100
+
+perc.loans.trust
+
+#perc of people acceptability
+
+length(games$bb_acceptable1[games$bb_acceptable1 != "never"])
+
+perc.loan.acceptability = length(games$bb_acceptable1[games$bb_acceptable1 != "never"])/194 *100
+
+perc.loan.acceptability
+
+#average amounts shared to other community from people who did share
+
+mean(H4_games$game3_shared[H4_games$game3_shared != 0])
+
+# how many people shared to other community projects
+
+length(H4_games$game3_shared[H4_games$game3_shared != 0])
+
+length(H4_games$game3_shared[H4_games$game3_shared != 0])/194 * 100
+
+
+#average amount shared to nonkin
+
+mean(H4_games$money_to_non_kin[H4_games$money_to_non_kin != 0])
+
+# how many people shared to nonkin
+length(H4_games$money_to_non_kin[H4_games$money_to_non_kin != 0])
+
+#percentage of people who shared to nonkin
+length(H4_games$money_to_non_kin[H4_games$money_to_non_kin != 0])/194 * 100
+
+
+
+
+#################"
+
+
+
+```
+
+
+
