@@ -25,6 +25,7 @@ library(broom)
 library(MASS)
 
 getwd()
+
 demography <- read_excel("C:/Users/Documents/Codem/codem_data_final.xlsx",sheet = "demography")
 
 
@@ -51,7 +52,7 @@ demography = demography %>% filter(interviewed == "yes")
 
 demography$age_rect = as.integer(interval(demography$dob, Sys.Date()) / dyears(1))
 
-#Changing little to yes in darija column
+#Changing the little category to yes in the darija column
 
 demography$darija[demography$darija == "little"] ="yes"
 unique(demography$darija)
@@ -65,7 +66,7 @@ unique(demography$darija)
 
 unique(labor$category)
 
-### creating a new column named wage where the value is yes if the person is engaged in wage labor and no if not 
+### Creating a new column named wage where the value is yes if the person is engaged in wage labor and no if not 
 
 labor = labor%>% mutate(wage = case_when(category %in% c("wage labor","house work and wage labor","house work and subsistence work and wage labor","salaried employment")~ "yes", TRUE ~ "no"))
 
@@ -75,7 +76,7 @@ labor = labor%>% mutate(wage = case_when(category %in% c("wage labor","house wor
 
 labor = merge(labor[, c("sn_ego_index", "category","wage")], economy[, c("sn_ego_index", "taxi")], by = "sn_ego_index", all = TRUE)
 
-### creating the wage_taxi column where it equals yes if either taxi or wage is equal to yes or both and no if both are equal to no
+### Creating the wage_taxi column where it equals yes if either taxi or wage is equal to yes or both and no if both are equal to no
 
 
 labor$wage_taxi <- ifelse(labor$wage == "yes" | labor$taxi == "yes", "yes", "no")
@@ -398,7 +399,7 @@ tab_model(mp3.4.1, dv.labels = "Odds of having bank savings")
 # webshot2::webshot( "mp3_4_1.html", "mp3_4_1.png")
 
 
-# Fourth hypothesis 
+# Fourth hypothesis: MI increases trust in financial institutions  
 
 ##Dataset
 
@@ -472,7 +473,7 @@ tab_model(mp4.2.1, dv.labels = "Amounts allocated to nonkin alters ")
 ```{r}
 #############Plots
 
-# total net income vs wage_taxi
+# Total net income by engagement in wage labor or taxi work within the village 
 boxplot(total_net_income_log ~ wage_taxi, data = H1_nonkin_extracom, 
         main = "Total net income per engagement in wage labor or taxi",  # Title of the plot
         xlab = "Engagement in wage or taxi",              # Label for the x-axis
@@ -494,7 +495,8 @@ boxplot(total_net_income_log ~ wage_taxi, data = H1_nonkin_extracom,
 
 ```{r}
 
-#total net income vs darija
+#Total net income across different levels of Darija fluency within the village 
+
 boxplot(total_net_income_log ~ darija, data = H1_nonkin_extracom, 
         main = "Total net income per levels of Darija fluency",  # Title of the plot
         xlab = "Darija fluency",              # Label for the x-axis
@@ -510,7 +512,7 @@ boxplot(total_net_income_log ~ darija, data = H1_nonkin_extracom,
 
 ```{r}
 
-# wage or taxi vs darija
+# Frequency of individuals engaged in wage labor or taxi work across different levels of Darija fluency within the village
 
 table_data <- table(H1_nonkin_extracom$wage_taxi, H1_nonkin_extracom$darija)
 barplot(table_data, legend.text = rownames(table_data),
@@ -527,14 +529,8 @@ View(econ_desc)
 ## Descriptive stats
 
 
-#percentage of male females interviewed 
 
-
-#average income for females vs males
-
-
-
-# Shares of each source of income from the total income of individuals within the village
+#Shares of each source of income relative to the total income of individuals within the village.
 
 #econ_desc$taxi_income_year = as.numeric(econ_desc$taxi_income_year)
 sum(is.na(econ_desc$taxi_income_year))
@@ -598,13 +594,14 @@ income.shares.perc = c(round(global.gov.perc, digits = 2),
 
 
 
-#average sharing partners across the village
+#Average number of sharing partners across the village
+
 mean(H1_nonkin_extracom$unique_nonkin_p1.2)
 mean(H1_nonkin_extracom$unique_out_com_p1.2)
 mean(H2_kin_incom$unique_kin_total)
 mean(H2_kin_incom$unique_in_com_total)
 
-#Shares of each type of alters the total alters named within within the village
+#Shares of each type of alter relative to the total number of alters named within the village.
 sum(H1_nonkin_extracom$unique_nonkin_p1.2)/sum(H1_nonkin_extracom$unique_nonkin_p1.1+H1_nonkin_extracom$unique_out_com_p1.1+H2_kin_incom$unique_kin_total+H2_kin_incom$unique_in_com_total)*100
 
 sum(H1_nonkin_extracom$unique_out_com_p1.2)/sum(H1_nonkin_extracom$unique_nonkin_p1.1+H1_nonkin_extracom$unique_out_com_p1.1+H2_kin_incom$unique_kin_total+H2_kin_incom$unique_in_com_total)*100
@@ -613,14 +610,14 @@ sum(H2_kin_incom$unique_kin_total)/sum(H1_nonkin_extracom$unique_nonkin_p1.1+H1_
 
 sum(H2_kin_incom$unique_in_com_total)/sum(H1_nonkin_extracom$unique_nonkin_p1.1+H1_nonkin_extracom$unique_out_com_p1.1+H2_kin_incom$unique_kin_total+H2_kin_incom$unique_in_com_total)*100
 
-#average of people with an account in a financial institution per household
+#Average number of people with an account in a financial institution per household
 
 bank.counts = H3_financial_ins[,c("HID","bank")] %>% group_by(HID) %>% summarize(num_account = sum( bank == "yes"))
 
 table(bank.counts$num_account)
 mean(bank.counts$num_account)
 
-#percentage of people who have an account in fin inst in the interview population
+#Percentage of individuals who have an account in financial institutions
 
 length(economy$bank[economy$bank == "yes"])
 
@@ -628,21 +625,21 @@ perc.account = (sum(bank.counts$num_account))/194 * 100 # +12 removed individual
 
 perc.account
 
-#average people who took a loan per house
+#Average number of people who took out a loan per household
 
 loan.counts = econ_desc[,c("HID","loans")] %>% group_by(HID) %>% summarize(num_loans = sum( loans == "yes"))
 
 table(loan.counts$num_loans)
 mean(loan.counts$num_loans)
 
-#perc of people who took a loan from the village
+#Percentage of individuals in the village who took out a loan
 
 perc.loans = length(economy$loans[economy$loans == "yes"])/194 *100
 perc.loans
 
 
 
-# perc of people who trust financial institutions
+#Percentage of people in the village who trust financial institutions
 
 length(econ_desc$loan_trust[econ_desc$loan_trust != "never"])
 
@@ -650,7 +647,7 @@ perc.loans.trust = length(econ_desc$loan_trust[econ_desc$loan_trust != "never"])
 
 perc.loans.trust
 
-#perc of people acceptability
+#Percentage of loan-taking acceptability in the village population
 
 length(games$bb_acceptable1[games$bb_acceptable1 != "never"])
 
@@ -658,7 +655,7 @@ perc.loan.acceptability = length(games$bb_acceptable1[games$bb_acceptable1 != "n
 
 perc.loan.acceptability
 
-#average amounts shared to other community from people who did share
+#Average amount shared with the other community by those who shared in economic games
 
 mean(H4_games$game3_shared[H4_games$game3_shared != 0])
 
@@ -669,14 +666,14 @@ length(H4_games$game3_shared[H4_games$game3_shared != 0])
 length(H4_games$game3_shared[H4_games$game3_shared != 0])/194 * 100
 
 
-#average amount shared to nonkin
+#Average amount shared with nonkin
 
 mean(H4_games$money_to_non_kin[H4_games$money_to_non_kin != 0])
 
-# how many people shared to nonkin
+#Number of people who shared with nonkin
 length(H4_games$money_to_non_kin[H4_games$money_to_non_kin != 0])
 
-#percentage of people who shared to nonkin
+#Percentage of people who shared with nonkin
 length(H4_games$money_to_non_kin[H4_games$money_to_non_kin != 0])/194 * 100
 
 
