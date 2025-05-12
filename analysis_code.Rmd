@@ -3,7 +3,7 @@ title: "R Notebook"
 output: html_notebook
 ---
 
-Inferential stats
+
 
 ```{r}
 
@@ -133,6 +133,7 @@ unique(economy$total_net_income_log)
 demography$age_scaled = demography$age_rect - 18
 
 
+#Inferential Stats
 
 #First hypothesis: MI increases reliance on non-kin and extra-community ties
 
